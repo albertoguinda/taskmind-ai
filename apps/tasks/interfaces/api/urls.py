@@ -1,23 +1,19 @@
 """
-API URL Configuration for Tasks app.
-Will be populated in Phase 4.
+API URL Configuration.
+
+Maps URLs to ViewSets.
 """
 
-from django.urls import path
-from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 
+from .views import TaskViewSet
 
-@api_view(['GET'])
-def api_root(request):
-    """Temporary API root endpoint"""
-    return Response({
-        'message': 'TaskMind AI API',
-        'version': '0.1.0',
-        'status': 'under development',
-    })
+# Create router
+router = DefaultRouter()
+router.register(r'tasks', TaskViewSet, basename='task')
 
-
+# URL patterns
 urlpatterns = [
-    path('', api_root, name='api-root'),
+    path('', include(router.urls)),
 ]

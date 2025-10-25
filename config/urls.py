@@ -1,5 +1,5 @@
 """
-TaskMind AI URL Configuration
+Main URL Configuration.
 """
 
 from django.contrib import admin
@@ -7,23 +7,37 @@ from django.urls import path, include
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
-    SpectacularRedocView,
 )
+from rest_framework.response import Response
+from rest_framework.decorators import api_view
+
+
+@api_view(['GET'])
+def api_root(request):
+    """API root endpoint."""
+    return Response({
+        'message': 'TaskMind AI API',
+        'version': '0.1.0',
+        'endpoints': {
+            'tasks': request.build_absolute_uri('/api/tasks/'),
+            'prioritized': request.build_absolute_uri('/api/tasks/prioritized/'),
+            'docs': request.build_absolute_uri('/api/schema/swagger-ui/'),
+            'admin': request.build_absolute_uri('/admin/'),
+        }
+    })
+
 
 urlpatterns = [
     # Django Admin
     path('admin/', admin.site.urls),
     
-    # API
+    # API Root
+    path('api/', api_root, name='api-root'),
+    
+    # Tasks API
     path('api/', include('apps.tasks.interfaces.api.urls')),
     
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/schema/swagger-ui/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
-    path('api/schema/redoc/', SpectacularRedocView.as_view(url_name='schema'), name='redoc'),
 ]
-
-# Customize admin site
-admin.site.site_header = "TaskMind AI Administration"
-admin.site.site_title = "TaskMind AI Admin"
-admin.site.index_title = "Welcome to TaskMind AI Admin Portal"
