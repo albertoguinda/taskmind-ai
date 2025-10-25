@@ -209,8 +209,16 @@ LOGGING = {
 TRANSFORMERS_CACHE = os.getenv('TRANSFORMERS_CACHE', str(BASE_DIR / '.cache' / 'huggingface'))
 HF_HOME = os.getenv('HF_HOME', TRANSFORMERS_CACHE)
 
+# AI Engine Configuration
+AI_ENGINE = 'huggingface'  # 'huggingface' or 'mock' (for testing)
+
 # AI Models Configuration
 AI_MODELS = {
     'urgency_classifier': 'facebook/bart-large-mnli',
     'sentiment_analyzer': 'distilbert-base-uncased-finetuned-sst-2-english',
+    'ner': 'dslim/bert-base-NER',
 }
+
+# Model settings
+AI_USE_GPU = os.getenv('AI_USE_GPU', 'False') == 'True'
+AI_BATCH_SIZE = int(os.getenv('AI_BATCH_SIZE', '8'))

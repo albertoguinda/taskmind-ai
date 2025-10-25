@@ -1,10 +1,15 @@
 """
 AI Infrastructure.
 
-Implementations of AI services for task analysis.
+Real AI implementation using Hugging Face Transformers.
 """
 
 from .ai_service import AIService
-from .mock_engine import MockAIEngine
+from .huggingface_engine import HuggingFaceEngine
+from .model_loader import model_loader
 
-__all__ = ["AIService", "MockAIEngine"]
+__all__ = [
+    "AIService",
+    "HuggingFaceEngine",
+    "model_loader",
+]

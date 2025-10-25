@@ -4,7 +4,9 @@ FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TRANSFORMERS_CACHE=/app/.cache/huggingface \
+    HF_HOME=/app/.cache/huggingface
 
 # Set work directory
 WORKDIR /app
@@ -16,6 +18,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Create cache directory for Hugging Face models (ANTES de copiar código)
+RUN mkdir -p /app/.cache/huggingface && \
+    chmod -R 777 /app/.cache
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
@@ -23,10 +29,6 @@ RUN pip install --upgrade pip && \
 
 # Copy project
 COPY . .
-
-# Create cache directory for Hugging Face models
-RUN mkdir -p /app/.cache/huggingface && \
-    chmod -R 777 /app/.cache
 
 # Expose port
 EXPOSE 8000

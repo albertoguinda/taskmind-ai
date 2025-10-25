@@ -22,7 +22,7 @@ from apps.tasks.application import (
     PrioritizeTasksUseCase,
 )
 from apps.tasks.infrastructure.django_orm import DjangoTaskRepository
-from apps.tasks.infrastructure.ai import MockAIEngine
+from apps.tasks.infrastructure.ai import HuggingFaceEngine  # ← CAMBIADO
 from apps.tasks.domain import TaskNotFoundException
 
 from .serializers import (
@@ -51,7 +51,7 @@ class TaskViewSet(viewsets.ViewSet):
         super().__init__(**kwargs)
         # Dependency Injection (simple version)
         self.repository = DjangoTaskRepository()
-        self.ai_service = MockAIEngine()
+        self.ai_service = HuggingFaceEngine()  # ← CAMBIADO
     
     @extend_schema(
         summary="List all tasks",
