@@ -286,7 +286,7 @@ MIT License - Ver [LICENSE](LICENSE) para detalles.
 
 - LinkedIn: [alberto-guinda](https://linkedin.com/in/alberto-guinda)
 - GitHub: [@albertoguinda](https://github.com/albertoguinda)
-- Email: alberto.guinda@example.com
+- Email: [@albertoguinda](albertoguindasevilla@gmail.com)
 
 ---
 
