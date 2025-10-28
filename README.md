@@ -284,9 +284,9 @@ MIT License - Ver [LICENSE](LICENSE) para detalles.
 
 **Alberto Guinda Sevilla**
 
-- LinkedIn: [alberto-guinda](https://linkedin.com/in/alberto-guinda)
-- GitHub: [@albertoguinda](https://github.com/albertoguinda)
-- Email: [albertoguindasevilla@gmail.com](mailto:albertoguindasevilla@gmail.com)
+- LinkedIn: <a href="https://www.linkedin.com/in/albertoguindasevilla/" target="_blank" rel="noopener noreferrer">alberto-guinda</a>
+- GitHub: <a href="https://github.com/albertoguinda?tab=repositories" target="_blank" rel="noopener noreferrer">@albertoguinda</a>
+- Email: <a href="mailto:albertoguindasevilla@gmail.com">albertoguindasevilla@gmail.com</a>
 
 ---
 
