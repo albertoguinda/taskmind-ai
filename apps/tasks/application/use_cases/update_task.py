@@ -1,9 +1,10 @@
 """
-Update Task Use Case.
+Caso de Uso: Actualizar Tarea.
 
-Updates an existing task with new data.
+Actualiza una tarea existente con nuevos datos (soporte para updates parciales).
 """
 
+import logging
 from apps.tasks.domain import (
     Task,
     TaskRepository,
@@ -13,44 +14,39 @@ from apps.tasks.domain import (
 )
 from ..dtos import UpdateTaskCommand, TaskResponse
 
+logger = logging.getLogger(__name__)
+
 
 class UpdateTaskUseCase:
     """
-    Use Case: Update an existing task.
-    
-    Supports partial updates (only provided fields are updated).
+    Caso de uso para actualizar una tarea existente.
+    Soporta updates parciales (solo los campos proporcionados se actualizan).
     """
     
     def __init__(self, task_repository: TaskRepository):
-        """
-        Initialize use case.
-        
-        Args:
-            task_repository: Repository for task persistence
-        """
         self.task_repository = task_repository
     
     def execute(self, command: UpdateTaskCommand) -> TaskResponse:
         """
-        Execute the use case.
+        Ejecuta el caso de uso.
         
         Args:
-            command: Update command with task ID and new data
-            
+            command: Comando con ID de tarea y datos a actualizar
+        
         Returns:
-            TaskResponse with updated task data
-            
+            TaskResponse con la tarea actualizada
+        
         Raises:
-            TaskNotFoundException: If task not found
-            ValueError: If validation fails
+            TaskNotFoundException: Si la tarea no existe
+            ValueError: Si la validación falla
         """
-        # 1. Find existing task
+        # 1. Buscar tarea existente
         task = self.task_repository.find_by_id(command.task_id)
         
         if not task:
             raise TaskNotFoundException(command.task_id)
         
-        # 2. Apply updates (only provided fields)
+        # 2. Aplicar updates (solo campos proporcionados)
         if command.title is not None:
             task.title = command.title
         
@@ -62,13 +58,15 @@ class UpdateTaskUseCase:
         
         if command.status is not None:
             new_status = Status(command.status)
-            task.change_status(new_status)  # Uses domain validation
+            task.change_status(new_status)  # Validación de dominio
         
-        # 3. Mark as updated
+        # 3. Marcar como actualizado
         task._mark_as_updated()
         
-        # 4. Save
+        # 4. Persistir
         updated_task = self.task_repository.save(task)
         
-        # 5. Return response
+        logger.info(f"Tarea actualizada: {updated_task.id}")
+        
+        # 5. Retornar respuesta
         return TaskResponse.from_entity(updated_task)

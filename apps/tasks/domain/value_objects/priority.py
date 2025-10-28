@@ -1,8 +1,8 @@
 """
-Priority Value Object.
+Value Object Priority.
 
-Represents the priority level of a task.
-This is a value object - immutable and defined by its value.
+Representa el nivel de prioridad de una tarea.
+Enum inmutable ordenado de menor a mayor prioridad.
 """
 
 from enum import Enum
@@ -10,10 +10,11 @@ from enum import Enum
 
 class Priority(str, Enum):
     """
-    Task priority levels.
+    Niveles de prioridad de tareas.
     
-    Ordered from lowest to highest priority.
+    Ordenados de menor a mayor: LOW < MEDIUM < HIGH < CRITICAL
     """
+    
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
@@ -22,25 +23,19 @@ class Priority(str, Enum):
     @classmethod
     def from_urgency_score(cls, score: float) -> "Priority":
         """
-        Calculate priority from urgency score (0-1).
+        Calcula la prioridad desde un urgency_score (0.0-1.0).
         
-        Business rule:
-        - 0.0 - 0.3: LOW
-        - 0.3 - 0.6: MEDIUM
+        Reglas de negocio:
+        - 0.0 - 0.3:  LOW
+        - 0.3 - 0.6:  MEDIUM
         - 0.6 - 0.85: HIGH
         - 0.85 - 1.0: CRITICAL
         
         Args:
-            score: Urgency score between 0 and 1
-            
+            score: Puntuación de urgencia [0.0, 1.0]
+        
         Returns:
-            Priority level
-            
-        Examples:
-            >>> Priority.from_urgency_score(0.2)
-            <Priority.LOW: 'LOW'>
-            >>> Priority.from_urgency_score(0.9)
-            <Priority.CRITICAL: 'CRITICAL'>
+            Priority correspondiente
         """
         if score < 0.3:
             return cls.LOW
@@ -51,8 +46,18 @@ class Priority(str, Enum):
         else:
             return cls.CRITICAL
     
+    def to_label(self) -> str:
+        """Retorna etiqueta en español."""
+        labels = {
+            Priority.LOW: "Baja",
+            Priority.MEDIUM: "Media",
+            Priority.HIGH: "Alta",
+            Priority.CRITICAL: "Crítica"
+        }
+        return labels[self]
+    
     def __str__(self) -> str:
         return self.value
     
     def __repr__(self) -> str:
-        return f"<Priority.{self.name}: '{self.value}'>"
+        return f"<Priority.{self.name}>"

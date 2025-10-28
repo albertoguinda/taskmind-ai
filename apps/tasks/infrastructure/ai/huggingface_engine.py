@@ -1,11 +1,10 @@
 """
-Hugging Face AI Engine.
+Motor de IA con Hugging Face.
 
-Real AI implementation using Hugging Face Transformers.
-Provides intelligent task analysis using state-of-the-art NLP models.
+Implementación real de IA usando modelos Transformers.
 """
 
-from typing import List, Set
+from typing import List, Set, Tuple
 import logging
 
 from apps.tasks.domain import Analysis, UrgencyScore
@@ -16,17 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class HuggingFaceEngine(AIService):
-    """
-    Real AI engine using Hugging Face models.
+    """Motor de IA usando modelos de Hugging Face."""
     
-    Features:
-    - Zero-shot classification for urgency detection
-    - Sentiment analysis for emotional context
-    - Named Entity Recognition for keyword extraction
-    - Multi-model ensemble for better accuracy
-    """
-    
-    # Candidate labels for urgency classification
+    # Etiquetas para clasificación de urgencia
     URGENCY_LABELS = [
         "extremely urgent and critical",
         "high priority and important",
@@ -34,7 +25,7 @@ class HuggingFaceEngine(AIService):
         "low priority and not urgent",
     ]
     
-    # Keywords that boost urgency
+    # Keywords que incrementan urgencia
     URGENT_KEYWORDS = {
         'urgent', 'critical', 'emergency', 'asap', 'immediately',
         'production', 'down', 'outage', 'broken', 'crash',
@@ -43,42 +34,48 @@ class HuggingFaceEngine(AIService):
         'client', 'customer', 'deadline', 'today', 'now',
     }
     
+    # Mapeo de etiquetas a scores
+    LABEL_TO_SCORE = {
+        "extremely urgent and critical": 1.0,
+        "high priority and important": 0.75,
+        "normal priority": 0.5,
+        "low priority and not urgent": 0.2,
+    }
+    
     def __init__(self):
-        """Initialize engine with models."""
+        """Inicializa el motor verificando modelos cargados."""
         if not model_loader.is_loaded():
-            raise RuntimeError("Hugging Face models not loaded")
+            raise RuntimeError("Modelos de Hugging Face no cargados")
         
         self.classifier = model_loader.classifier
         self.sentiment_analyzer = model_loader.sentiment
         self.ner = model_loader.ner
+        
+        logger.info("✅ HuggingFaceEngine inicializado")
     
     def analyze_task_text(self, text: str) -> Analysis:
-        """
-        Analyze task text using AI.
-        
-        Args:
-            text: Combined title + description
-            
-        Returns:
-            Analysis with urgency score, keywords, confidence, sentiment
-        """
+        """Analiza el texto de una tarea usando IA."""
         if not text or not text.strip():
+            logger.warning("⚠️ Texto vacío")
             return Analysis.create_default()
         
         try:
-            # 1. Zero-shot classification for urgency
+            # Clasificar urgencia
             urgency_score, confidence = self._classify_urgency(text)
             
-            # 2. Extract keywords (NER + custom logic)
+            # Extraer keywords
             keywords = self._extract_keywords(text)
             
-            # 3. Sentiment analysis
+            # Analizar sentimiento
             sentiment = self._analyze_sentiment(text)
             
-            # 4. Boost urgency if critical keywords present
+            # Aplicar boost por keywords críticos
             urgency_score = self._apply_keyword_boost(text, urgency_score)
             
-            logger.info(f"✅ AI Analysis: urgency={urgency_score:.2f}, keywords={len(keywords)}")
+            logger.info(
+                f"✅ Análisis: urgencia={urgency_score:.2f}, "
+                f"keywords={len(keywords)}, sentimiento={sentiment:.2f}"
+            )
             
             return Analysis(
                 urgency_score=UrgencyScore(value=urgency_score),
@@ -88,47 +85,32 @@ class HuggingFaceEngine(AIService):
             )
             
         except Exception as e:
-            logger.error(f"❌ AI analysis failed: {e}")
-            # Fallback to default
+            logger.error(f"❌ Error en análisis: {e}", exc_info=True)
             return Analysis.create_default()
     
-    def _classify_urgency(self, text: str) -> tuple[float, float]:
-        """
-        Classify text urgency using zero-shot classification.
-        
-        Returns:
-            (urgency_score, confidence)
-        """
-        result = self.classifier(
-            text,
-            candidate_labels=self.URGENCY_LABELS,
-            multi_label=False,
-        )
-        
-        # Map labels to urgency scores
-        label_scores = {
-            "extremely urgent and critical": 1.0,
-            "high priority and important": 0.75,
-            "normal priority": 0.5,
-            "low priority and not urgent": 0.2,
-        }
-        
-        top_label = result['labels'][0]
-        top_score = result['scores'][0]
-        
-        urgency = label_scores.get(top_label, 0.5)
-        
-        logger.debug(f"Urgency classification: {top_label} (confidence: {top_score:.2f})")
-        
-        return urgency, top_score
+    def _classify_urgency(self, text: str) -> Tuple[float, float]:
+        """Clasifica urgencia usando zero-shot classification."""
+        try:
+            result = self.classifier(
+                text,
+                candidate_labels=self.URGENCY_LABELS,
+                multi_label=False,
+            )
+            
+            top_label = result['labels'][0]
+            top_confidence = result['scores'][0]
+            urgency_score = self.LABEL_TO_SCORE.get(top_label, 0.5)
+            
+            logger.debug(f"Clasificación: '{top_label}' (urgencia={urgency_score:.2f})")
+            
+            return urgency_score, top_confidence
+            
+        except Exception as e:
+            logger.error(f"❌ Error en clasificación: {e}")
+            return 0.5, 0.5
     
     def _extract_keywords(self, text: str) -> List[str]:
-        """
-        Extract keywords using NER + custom logic.
-        
-        Returns:
-            List of important keywords
-        """
+        """Extrae keywords usando NER + lógica personalizada."""
         keywords: Set[str] = set()
         
         # 1. Named Entity Recognition
@@ -136,18 +118,18 @@ class HuggingFaceEngine(AIService):
             entities = self.ner(text)
             for entity in entities:
                 word = entity['word'].replace('##', '').strip()
-                if len(word) > 2:  # Skip very short tokens
+                if len(word) > 2:
                     keywords.add(word.lower())
         except Exception as e:
-            logger.warning(f"NER extraction failed: {e}")
+            logger.warning(f"⚠️ NER falló: {e}")
         
-        # 2. Check for urgent keywords
+        # 2. Keywords urgentes predefinidos
         text_lower = text.lower()
         for keyword in self.URGENT_KEYWORDS:
             if keyword in text_lower:
                 keywords.add(keyword)
         
-        # 3. Extract capitalized words (likely important)
+        # 3. Palabras capitalizadas (nombres propios, tecnologías)
         words = text.split()
         for word in words:
             if word and word[0].isupper() and len(word) > 3:
@@ -155,53 +137,35 @@ class HuggingFaceEngine(AIService):
                 if clean_word:
                     keywords.add(clean_word.lower())
         
-        # Return top 10 keywords
         return sorted(list(keywords))[:10]
     
     def _analyze_sentiment(self, text: str) -> float:
-        """
-        Analyze sentiment of text.
-        
-        Returns:
-            Sentiment score (-1 to 1)
-        """
+        """Analiza sentimiento emocional del texto."""
         try:
             result = self.sentiment_analyzer(text)[0]
+            label = result['label']
+            score = result['score']
             
-            # Convert to -1 to 1 scale
-            label = result['label']  # 'POSITIVE' or 'NEGATIVE'
-            score = result['score']  # 0 to 1
-            
-            if label == 'NEGATIVE':
-                return -score
-            else:
-                return score
+            # Convertir a escala -1 a 1
+            return -score if label == 'NEGATIVE' else score
                 
         except Exception as e:
-            logger.warning(f"Sentiment analysis failed: {e}")
+            logger.warning(f"⚠️ Sentimiento falló: {e}")
             return 0.0
     
     def _apply_keyword_boost(self, text: str, base_score: float) -> float:
-        """
-        Boost urgency if critical keywords are present.
-        
-        Args:
-            text: Task text
-            base_score: Base urgency from classification
-            
-        Returns:
-            Adjusted urgency score
-        """
+        """Incrementa urgencia si hay keywords críticos."""
         text_lower = text.lower()
+        critical_keywords = ['critical', 'urgent', 'emergency', 'production', 'down']
         
-        # Count critical keywords
-        critical_count = sum(
-            1 for keyword in ['critical', 'urgent', 'emergency', 'production', 'down']
-            if keyword in text_lower
-        )
+        # Contar keywords críticos
+        critical_count = sum(1 for kw in critical_keywords if kw in text_lower)
         
-        # Boost by 0.1 per critical keyword (max +0.3)
+        # Boost: +0.1 por keyword, máximo +0.3
         boost = min(critical_count * 0.1, 0.3)
+        adjusted_score = min(base_score + boost, 1.0)
         
-        # Cap at 1.0
-        return min(base_score + boost, 1.0)
+        if boost > 0:
+            logger.debug(f"Boost: +{boost:.2f} ({base_score:.2f} → {adjusted_score:.2f})")
+        
+        return adjusted_score

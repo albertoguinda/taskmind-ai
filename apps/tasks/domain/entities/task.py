@@ -1,12 +1,12 @@
 """
-Task Entity.
+Entidad Task del Dominio.
 
-Core domain entity representing a task in the system.
-This is framework-agnostic - pure Python, no Django dependencies.
+Entidad core que representa una tarea en el sistema.
+Framework-agnostic: Python puro, sin dependencias de Django.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID, uuid4
 
@@ -16,65 +16,106 @@ from ..value_objects import Priority, Status, UrgencyScore
 @dataclass
 class Task:
     """
-    Task domain entity.
+    Entidad de dominio Task (Tarea).
     
-    Represents a task with all its business logic.
-    This class is framework-agnostic and contains only domain logic.
+    Representa una tarea con toda su lógica de negocio.
+    Esta clase es independiente del framework y contiene solo lógica de dominio.
     
-    Attributes:
-        id: Unique identifier
-        title: Task title (required)
-        description: Task description
-        priority: Priority level (LOW, MEDIUM, HIGH, CRITICAL)
-        status: Current status (TODO, IN_PROGRESS, DONE, CANCELLED)
-        urgency_score: AI-calculated urgency (0-1)
-        ai_keywords: Keywords extracted by AI
-        created_at: When the task was created
-        updated_at: When the task was last updated
+    Reglas de Negocio:
+    - El título es obligatorio y no puede exceder 200 caracteres
+    - La prioridad se deriva automáticamente del urgency_score
+    - Las transiciones de estado deben seguir reglas válidas
+    - Los timestamps se actualizan automáticamente en cada cambio
+    
+    Atributos:
+        id: Identificador único (UUID v4)
+        title: Título de la tarea (obligatorio)
+        description: Descripción detallada de la tarea
+        priority: Nivel de prioridad (LOW, MEDIUM, HIGH, CRITICAL)
+        status: Estado actual (TODO, IN_PROGRESS, DONE, CANCELLED)
+        urgency_score: Puntuación de urgencia calculada por IA (0.0-1.0)
+        ai_keywords: Keywords extraídos por IA
+        created_at: Timestamp de creación (UTC, timezone-aware)
+        updated_at: Timestamp de última actualización (UTC, timezone-aware)
+    
+    Ejemplo:
+        >>> task = Task(title="Fix critical bug", description="Production issue")
+        >>> task.update_urgency(UrgencyScore(0.95))
+        >>> assert task.priority == Priority.CRITICAL
+        >>> task.start_work()
+        >>> assert task.is_in_progress()
     """
     
-    # Required fields
+    # Campos obligatorios
     title: str
     description: str = ""
     
-    # Value objects with defaults
+    # Value objects con valores por defecto
     priority: Priority = Priority.MEDIUM
     status: Status = Status.TODO
     urgency_score: UrgencyScore = field(default_factory=UrgencyScore.default)
     
-    # Optional fields
+    # Campos opcionales (generados automáticamente)
     id: UUID = field(default_factory=uuid4)
     ai_keywords: List[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    
+    # Timestamps timezone-aware (Python 3.11+)
+    created_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
     
     def __post_init__(self):
-        """Validate task on creation."""
+        """
+        Validación automática después de inicialización.
+        Se ejecuta después de __init__ en dataclasses.
+        """
         self._validate()
     
     def _validate(self):
         """
-        Validate task business rules.
+        Valida las reglas de negocio de la tarea.
         
         Raises:
-            ValueError: If validation fails
+            ValueError: Si alguna regla de validación falla
         """
+        # Regla 1: El título no puede estar vacío
         if not self.title or not self.title.strip():
-            raise ValueError("Task title cannot be empty")
+            raise ValueError("El título de la tarea no puede estar vacío")
         
+        # Regla 2: El título tiene un límite de caracteres
         if len(self.title) > 200:
-            raise ValueError("Task title cannot exceed 200 characters")
+            raise ValueError("El título no puede exceder 200 caracteres")
+        
+        # Regla 3: Asegurar que los timestamps sean timezone-aware
+        if self.created_at.tzinfo is None:
+            self.created_at = self.created_at.replace(tzinfo=timezone.utc)
+        if self.updated_at.tzinfo is None:
+            self.updated_at = self.updated_at.replace(tzinfo=timezone.utc)
     
-    # Business Logic Methods
+    # ==========================================
+    # Métodos de Lógica de Negocio
+    # ==========================================
     
     def update_urgency(self, score: UrgencyScore) -> None:
         """
-        Update urgency score and recalculate priority.
+        Actualiza el urgency_score y recalcula la prioridad automáticamente.
         
-        Business rule: Priority is automatically derived from urgency score.
+        Regla de Negocio:
+        La prioridad se deriva automáticamente del urgency_score según:
+        - 0.0-0.3: LOW
+        - 0.3-0.6: MEDIUM
+        - 0.6-0.85: HIGH
+        - 0.85-1.0: CRITICAL
         
         Args:
-            score: New urgency score
+            score: Nuevo urgency_score calculado por IA
+        
+        Ejemplo:
+            >>> task.update_urgency(UrgencyScore(0.9))
+            >>> assert task.priority == Priority.CRITICAL
         """
         self.urgency_score = score
         self.priority = Priority.from_urgency_score(float(score))
@@ -82,19 +123,26 @@ class Task:
     
     def change_status(self, new_status: Status) -> None:
         """
-        Change task status with validation.
+        Cambia el estado de la tarea con validación de transiciones.
         
-        Business rule: Status transitions must be valid.
+        Regla de Negocio:
+        Las transiciones de estado deben seguir reglas válidas definidas
+        en el value object Status (ej: no se puede ir de DONE a TODO).
         
         Args:
-            new_status: Target status
-            
+            new_status: Estado destino
+        
         Raises:
-            ValueError: If transition is invalid
+            ValueError: Si la transición no es válida
+        
+        Ejemplo:
+            >>> task.change_status(Status.IN_PROGRESS)  # OK
+            >>> task.change_status(Status.TODO)  # ValueError!
         """
         if not self.status.can_transition_to(new_status):
             raise ValueError(
-                f"Cannot transition from {self.status} to {new_status}"
+                f"No se puede transicionar de {self.status.value} "
+                f"a {new_status.value}"
             )
         
         self.status = new_status
@@ -102,80 +150,150 @@ class Task:
     
     def start_work(self) -> None:
         """
-        Start working on the task.
+        Inicia el trabajo en la tarea.
         
-        Business shortcut for: TODO -> IN_PROGRESS
+        Atajo de negocio para: TODO → IN_PROGRESS
+        
+        Raises:
+            ValueError: Si la tarea no está en estado TODO
         """
         self.change_status(Status.IN_PROGRESS)
     
     def complete(self) -> None:
         """
-        Mark task as completed.
+        Marca la tarea como completada.
         
-        Business shortcut for: IN_PROGRESS -> DONE
+        Atajo de negocio para: IN_PROGRESS → DONE
+        
+        Raises:
+            ValueError: Si la tarea no está en estado IN_PROGRESS
         """
         self.change_status(Status.DONE)
     
     def cancel(self) -> None:
         """
-        Cancel the task.
+        Cancela la tarea.
         
-        Can be called from any non-terminal state.
+        Puede llamarse desde cualquier estado no terminal.
+        Una vez cancelada, la tarea no puede reactivarse.
         """
         self.change_status(Status.CANCELLED)
     
     def add_keywords(self, keywords: List[str]) -> None:
         """
-        Add AI-extracted keywords to the task.
+        Añade keywords extraídos por IA a la tarea.
+        
+        Los keywords se limpian automáticamente:
+        - Eliminación de duplicados
+        - Eliminación de strings vacíos
+        - Trim de espacios en blanco
         
         Args:
-            keywords: List of keywords from AI analysis
+            keywords: Lista de keywords del análisis de IA
+        
+        Ejemplo:
+            >>> task.add_keywords(["django", "api", "bug", "django"])
+            >>> assert task.ai_keywords == ["api", "bug", "django"]  # sin duplicados
         """
-        # Remove duplicates and empty strings
+        # Limpiar: eliminar duplicados, vacíos y hacer trim
         unique_keywords = list(set(k.strip() for k in keywords if k.strip()))
-        self.ai_keywords = unique_keywords
+        self.ai_keywords = sorted(unique_keywords)  # ordenar para consistencia
         self._mark_as_updated()
     
+    # ==========================================
+    # Métodos de Consulta (Query Methods)
+    # ==========================================
+    
     def is_urgent(self) -> bool:
-        """Check if task is urgent based on urgency score."""
+        """
+        Verifica si la tarea es urgente (urgency_score >= 0.7).
+        
+        Returns:
+            True si es urgente, False en caso contrario
+        """
         return self.urgency_score.is_urgent()
     
     def is_critical(self) -> bool:
-        """Check if task is critical based on urgency score."""
+        """
+        Verifica si la tarea es crítica (urgency_score >= 0.85).
+        
+        Returns:
+            True si es crítica, False en caso contrario
+        """
         return self.urgency_score.is_critical()
     
     def is_completed(self) -> bool:
-        """Check if task is completed."""
+        """
+        Verifica si la tarea está completada.
+        
+        Returns:
+            True si status == DONE
+        """
         return self.status == Status.DONE
     
     def is_in_progress(self) -> bool:
-        """Check if task is being worked on."""
+        """
+        Verifica si la tarea está en progreso.
+        
+        Returns:
+            True si status == IN_PROGRESS
+        """
         return self.status == Status.IN_PROGRESS
     
-    def _mark_as_updated(self) -> None:
-        """Update the updated_at timestamp."""
-        self.updated_at = datetime.utcnow()
+    def is_cancelled(self) -> bool:
+        """
+        Verifica si la tarea está cancelada.
+        
+        Returns:
+            True si status == CANCELLED
+        """
+        return self.status == Status.CANCELLED
     
-    # Comparison and representation
+    # ==========================================
+    # Métodos Internos
+    # ==========================================
+    
+    def _mark_as_updated(self) -> None:
+        """
+        Actualiza el timestamp updated_at al momento actual (UTC).
+        Se llama automáticamente en cada operación que modifica la tarea.
+        """
+        self.updated_at = datetime.now(timezone.utc)
+    
+    # ==========================================
+    # Métodos Dunder (Comparación y Representación)
+    # ==========================================
     
     def __eq__(self, other: object) -> bool:
-        """Two tasks are equal if they have the same ID."""
+        """
+        Dos tareas son iguales si tienen el mismo ID.
+        Implementa igualdad por identidad (no por valor).
+        """
         if not isinstance(other, Task):
             return False
         return self.id == other.id
     
     def __hash__(self) -> int:
-        """Hash based on ID for use in sets/dicts."""
+        """
+        Hash basado en ID para uso en sets/dicts.
+        Permite usar Task en estructuras hashables.
+        """
         return hash(self.id)
     
     def __str__(self) -> str:
-        """Human-readable representation."""
-        return f"Task('{self.title}', {self.priority}, {self.status})"
+        """
+        Representación legible para humanos.
+        Usado en logs, debugging casual, prints.
+        """
+        return f"Task('{self.title}', {self.priority.value}, {self.status.value})"
     
     def __repr__(self) -> str:
-        """Developer-friendly representation."""
+        """
+        Representación completa para desarrolladores.
+        Usado en debugging, REPL, logs técnicos.
+        """
         return (
-            f"Task(id={self.id}, title='{self.title}', "
-            f"priority={self.priority}, status={self.status}, "
-            f"urgency_score={self.urgency_score})"
+            f"Task(id={self.id}, title='{self.title[:30]}...', "
+            f"priority={self.priority.value}, status={self.status.value}, "
+            f"urgency_score={float(self.urgency_score):.2f})"
         )

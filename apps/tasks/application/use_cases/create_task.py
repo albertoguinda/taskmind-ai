@@ -1,31 +1,30 @@
 """
-Create Task Use Case.
+Caso de Uso: Crear Tarea.
 
-Orchestrates the creation of a new task with AI analysis.
+Orquesta la creación de una nueva tarea con análisis de IA.
 """
 
+import logging
 from typing import Optional
 
 from apps.tasks.domain import Task, TaskRepository, TaskService
 from apps.tasks.infrastructure.ai import AIService
 from ..dtos import CreateTaskCommand, TaskResponse
 
+logger = logging.getLogger(__name__)
+
 
 class CreateTaskUseCase:
     """
-    Use Case: Create a new task with AI analysis.
+    Caso de uso para crear una tarea con análisis de IA.
     
-    Flow:
-    1. Validate input (command)
-    2. Create domain entity (Task)
-    3. Analyze with AI (urgency score + keywords)
-    4. Apply business rules (priority calculation)
-    5. Save to repository
-    6. Return response DTO
-    
-    This follows the Dependency Inversion Principle:
-    - Depends on abstractions (TaskRepository, AIService)
-    - Not on concrete implementations
+    Flujo:
+    1. Crear entidad de dominio (Task)
+    2. Validar reglas de negocio
+    3. Analizar con IA (urgencia + keywords)
+    4. Aplicar análisis a la tarea
+    5. Persistir en repositorio
+    6. Retornar DTO de respuesta
     """
     
     def __init__(
@@ -35,12 +34,12 @@ class CreateTaskUseCase:
         task_service: Optional[TaskService] = None,
     ):
         """
-        Initialize use case with dependencies.
+        Inicializa el caso de uso con sus dependencias.
         
         Args:
-            task_repository: Repository for task persistence
-            ai_service: Service for AI analysis
-            task_service: Domain service for business logic (optional)
+            task_repository: Repositorio para persistencia
+            ai_service: Servicio de IA para análisis
+            task_service: Servicio de dominio (opcional)
         """
         self.task_repository = task_repository
         self.ai_service = ai_service
@@ -48,51 +47,49 @@ class CreateTaskUseCase:
     
     def execute(self, command: CreateTaskCommand) -> TaskResponse:
         """
-        Execute the use case.
+        Ejecuta el caso de uso.
         
         Args:
-            command: Input command with task data
-            
+            command: Comando con los datos de la tarea
+        
         Returns:
-            TaskResponse with created task data
-            
+            TaskResponse con la tarea creada
+        
         Raises:
-            ValueError: If validation fails
-            
-        Example:
-            >>> command = CreateTaskCommand(
-            ...     title="Fix production bug",
-            ...     description="Server is down"
-            ... )
-            >>> response = use_case.execute(command)
-            >>> print(response.urgency_score)
-            0.95
+            ValueError: Si la validación falla
         """
-        # 1. Create domain entity
+        # 1. Crear entidad de dominio
         task = Task(
             title=command.title,
             description=command.description,
         )
         
-        # 2. Validate with domain service
+        # 2. Validar con servicio de dominio
         self.task_service.validate_task(task)
         
-        # 3. Analyze with AI
+        # 3. Analizar con IA
         text_to_analyze = f"{task.title} {task.description}"
         
         try:
             analysis = self.ai_service.analyze_task_text(text_to_analyze)
             
-            # 4. Apply analysis to task (domain service)
+            # 4. Aplicar análisis a la tarea
             self.task_service.apply_analysis_to_task(task, analysis)
             
+            logger.info(
+                f"Tarea analizada: urgencia={float(task.urgency_score):.2f}, "
+                f"keywords={len(task.ai_keywords)}"
+            )
+            
         except Exception as e:
-            # If AI fails, use default values (resilience)
-            print(f"AI analysis failed: {e}. Using default values.")
-            # Task keeps default urgency_score and priority
+            # Resiliencia: si falla IA, usar valores por defecto
+            logger.warning(f"Análisis IA falló: {e}. Usando valores por defecto.")
+            # La tarea mantiene urgency_score y priority por defecto
         
-        # 5. Save to repository
+        # 5. Persistir en repositorio
         saved_task = self.task_repository.save(task)
         
-        # 6. Return response DTO
+        logger.info(f"Tarea creada: {saved_task.id}")
+        
+        # 6. Retornar DTO de respuesta
         return TaskResponse.from_entity(saved_task)

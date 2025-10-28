@@ -1,7 +1,7 @@
 """
-Status Value Object.
+Value Object Status.
 
-Represents the current state of a task in its lifecycle.
+Representa el estado actual de una tarea en su ciclo de vida.
 """
 
 from enum import Enum
@@ -9,10 +9,11 @@ from enum import Enum
 
 class Status(str, Enum):
     """
-    Task status states.
+    Estados del workflow de tareas.
     
-    Represents the workflow: TODO -> IN_PROGRESS -> DONE
+    Flujo: TODO → IN_PROGRESS → DONE
     """
+    
     TODO = "TODO"
     IN_PROGRESS = "IN_PROGRESS"
     DONE = "DONE"
@@ -20,41 +21,38 @@ class Status(str, Enum):
     
     def can_transition_to(self, new_status: "Status") -> bool:
         """
-        Check if transition to new status is valid.
+        Verifica si la transición al nuevo estado es válida.
         
-        Business rules:
-        - TODO can go to IN_PROGRESS or CANCELLED
-        - IN_PROGRESS can go to DONE or CANCELLED
-        - DONE is terminal (cannot change)
-        - CANCELLED is terminal (cannot change)
-        
-        Args:
-            new_status: Target status
-            
-        Returns:
-            True if transition is valid
-            
-        Examples:
-            >>> Status.TODO.can_transition_to(Status.IN_PROGRESS)
-            True
-            >>> Status.DONE.can_transition_to(Status.TODO)
-            False
+        Reglas de negocio:
+        - TODO → IN_PROGRESS o CANCELLED
+        - IN_PROGRESS → DONE o CANCELLED
+        - DONE y CANCELLED son estados terminales (no cambian)
         """
         valid_transitions = {
             Status.TODO: {Status.IN_PROGRESS, Status.CANCELLED},
             Status.IN_PROGRESS: {Status.DONE, Status.CANCELLED},
-            Status.DONE: set(),  # Terminal state
-            Status.CANCELLED: set(),  # Terminal state
+            Status.DONE: set(),
+            Status.CANCELLED: set(),
         }
         
         return new_status in valid_transitions.get(self, set())
     
     def is_terminal(self) -> bool:
-        """Check if this is a terminal state (cannot transition)."""
+        """Verifica si es un estado terminal."""
         return self in {Status.DONE, Status.CANCELLED}
+    
+    def to_label(self) -> str:
+        """Retorna etiqueta en español."""
+        labels = {
+            Status.TODO: "Por hacer",
+            Status.IN_PROGRESS: "En progreso",
+            Status.DONE: "Completada",
+            Status.CANCELLED: "Cancelada"
+        }
+        return labels[self]
     
     def __str__(self) -> str:
         return self.value
     
     def __repr__(self) -> str:
-        return f"<Status.{self.name}: '{self.value}'>"
+        return f"<Status.{self.name}>"

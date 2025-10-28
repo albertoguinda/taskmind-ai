@@ -1,23 +1,23 @@
 """
-Prioritize Tasks Use Case.
+Caso de Uso: Priorizar Tareas.
 
-Orders tasks by AI-calculated urgency score.
+Ordena tareas por urgencia calculada por IA.
 """
 
+import logging
 from typing import List
 
 from apps.tasks.domain import Task, TaskRepository, TaskService
 from ..dtos import TaskListResponse, TaskResponse
 
+logger = logging.getLogger(__name__)
+
 
 class PrioritizeTasksUseCase:
     """
-    Use Case: Get tasks ordered by AI urgency.
+    Caso de uso para obtener tareas ordenadas por urgencia de IA.
     
-    This is a specialized query that demonstrates the value of AI:
-    Tasks are sorted by urgency_score (0-1) rather than manual priority.
-    
-    Business rule: Higher urgency_score = more urgent = should be done first.
+    Regla de negocio: Mayor urgency_score = más urgente = debe hacerse primero.
     """
     
     def __init__(
@@ -25,46 +25,34 @@ class PrioritizeTasksUseCase:
         task_repository: TaskRepository,
         task_service: TaskService = None,
     ):
-        """
-        Initialize use case.
-        
-        Args:
-            task_repository: Repository for task persistence
-            task_service: Domain service for sorting logic
-        """
         self.task_repository = task_repository
         self.task_service = task_service or TaskService()
     
     def execute(self, include_completed: bool = False) -> TaskListResponse:
         """
-        Execute the use case.
+        Ejecuta el caso de uso.
         
         Args:
-            include_completed: Whether to include DONE/CANCELLED tasks
-            
+            include_completed: Si incluir tareas DONE/CANCELLED
+        
         Returns:
-            TaskListResponse with tasks sorted by urgency (highest first)
-            
-        Example:
-            >>> response = use_case.execute(include_completed=False)
-            >>> print(response.tasks[0].urgency_score)  # Highest
-            0.95
-            >>> print(response.tasks[-1].urgency_score)  # Lowest
-            0.12
+            TaskListResponse con tareas ordenadas por urgencia (mayor primero)
         """
-        # 1. Get all tasks
+        # 1. Obtener todas las tareas
         all_tasks = self.task_repository.find_all()
         
-        # 2. Filter out completed if needed
+        # 2. Filtrar completadas si es necesario
         if not include_completed:
             tasks = self.task_service.filter_actionable_tasks(all_tasks)
         else:
             tasks = all_tasks
         
-        # 3. Sort by priority and urgency (domain service)
+        # 3. Ordenar por prioridad y urgencia (servicio de dominio)
         sorted_tasks = self.task_service.sort_by_priority(tasks)
         
-        # 4. Convert to response DTOs
+        logger.info(f"Tareas priorizadas: {len(sorted_tasks)}")
+        
+        # 4. Convertir a DTOs de respuesta
         task_responses = [TaskResponse.from_entity(t) for t in sorted_tasks]
         
         return TaskListResponse(
@@ -77,31 +65,25 @@ class PrioritizeTasksUseCase:
 
 class GetUrgentTasksUseCase:
     """
-    Use Case: Get only urgent tasks (urgency_score >= 0.7).
-    
-    This is a convenience use case for the most critical tasks.
+    Caso de uso para obtener solo tareas urgentes (urgency_score >= 0.7).
     """
     
     def __init__(self, task_repository: TaskRepository):
-        """
-        Initialize use case.
-        
-        Args:
-            task_repository: Repository for task persistence
-        """
         self.task_repository = task_repository
     
     def execute(self) -> TaskListResponse:
         """
-        Execute the use case.
+        Ejecuta el caso de uso.
         
         Returns:
-            TaskListResponse with urgent tasks only
+            TaskListResponse con solo tareas urgentes
         """
-        # Get urgent tasks (repository has this query optimized)
+        # Obtener tareas urgentes (consulta optimizada en repositorio)
         urgent_tasks = self.task_repository.find_urgent_tasks()
         
-        # Convert to response DTOs
+        logger.info(f"Tareas urgentes encontradas: {len(urgent_tasks)}")
+        
+        # Convertir a DTOs de respuesta
         task_responses = [TaskResponse.from_entity(t) for t in urgent_tasks]
         
         return TaskListResponse(

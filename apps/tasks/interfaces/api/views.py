@@ -1,14 +1,16 @@
 """
-API ViewSets.
+ViewSets de la API.
 
-ViewSets handle HTTP requests and delegate to Use Cases.
-They are the entry point of the API.
+Manejan peticiones HTTP y delegan a los Casos de Uso.
 """
 
+from uuid import UUID
+from dataclasses import asdict
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiParameter
+import logging
 
 from apps.tasks.application import (
     CreateTaskUseCase,
@@ -22,7 +24,7 @@ from apps.tasks.application import (
     PrioritizeTasksUseCase,
 )
 from apps.tasks.infrastructure.django_orm import DjangoTaskRepository
-from apps.tasks.infrastructure.ai import HuggingFaceEngine  # ← CAMBIADO
+from apps.tasks.infrastructure.ai import HuggingFaceEngine
 from apps.tasks.domain import TaskNotFoundException
 
 from .serializers import (
@@ -32,199 +34,182 @@ from .serializers import (
     TaskListResponseSerializer,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class TaskViewSet(viewsets.ViewSet):
     """
-    ViewSet for Task CRUD operations.
-    
+    ViewSet para operaciones CRUD de tareas.
+
     Endpoints:
-    - GET    /api/tasks/              - List all tasks
-    - POST   /api/tasks/              - Create a new task
-    - GET    /api/tasks/{id}/         - Get task detail
-    - PATCH  /api/tasks/{id}/         - Update task
-    - DELETE /api/tasks/{id}/         - Delete task
-    - GET    /api/tasks/prioritized/  - Get tasks sorted by AI urgency
+    - GET    /api/tasks/              - Listar tareas
+    - POST   /api/tasks/              - Crear tarea
+    - GET    /api/tasks/{id}/         - Detalle de tarea
+    - PATCH  /api/tasks/{id}/         - Actualizar tarea
+    - DELETE /api/tasks/{id}/         - Eliminar tarea
+    - GET    /api/tasks/prioritized/  - Tareas priorizadas por IA
     """
-    
-    def __init__(self, **kwargs):
-        """Initialize with dependencies."""
-        super().__init__(**kwargs)
-        # Dependency Injection (simple version)
-        self.repository = DjangoTaskRepository()
-        self.ai_service = HuggingFaceEngine()  # ← CAMBIADO
-    
+
+    def get_repository(self):
+        """Obtiene repositorio (cached)."""
+        if not hasattr(self, '_repository'):
+            self._repository = DjangoTaskRepository()
+        return self._repository
+
+    def get_ai_service(self):
+        """Obtiene servicio de IA (singleton, modelos pre-cargados)."""
+        if not hasattr(self, '_ai_service'):
+            self._ai_service = HuggingFaceEngine()
+        return self._ai_service
+
+    def _validate_uuid(self, pk: str) -> UUID:
+        """Valida y convierte string a UUID."""
+        try:
+            return UUID(pk)
+        except (ValueError, TypeError):
+            raise ValueError("Formato de UUID inválido")
+
+    def _serialize_task(self, task_response):
+        """Serializa TaskResponse a JSON."""
+        return TaskSerializer(asdict(task_response)).data
+
+    def _serialize_task_list(self, list_response):
+        """Serializa TaskListResponse a JSON."""
+        return TaskListResponseSerializer({
+            'tasks': [asdict(task) for task in list_response.tasks],
+            'total': list_response.total,
+            'limit': list_response.limit,
+            'offset': list_response.offset,
+        }).data
+
     @extend_schema(
-        summary="List all tasks",
+        summary="Listar tareas",
         parameters=[
-            OpenApiParameter(name='status', description='Filter by status'),
-            OpenApiParameter(name='priority', description='Filter by priority'),
-            OpenApiParameter(name='urgent_only', description='Only urgent tasks', type=bool),
+            OpenApiParameter(name='status', description='Filtrar por estado'),
+            OpenApiParameter(name='priority', description='Filtrar por prioridad'),
+            OpenApiParameter(name='urgent_only', description='Solo urgentes', type=bool),
         ],
         responses={200: TaskListResponseSerializer}
     )
     def list(self, request):
-        """
-        List all tasks with optional filters.
-        
-        Query parameters:
-        - status: Filter by status (TODO, IN_PROGRESS, DONE, CANCELLED)
-        - priority: Filter by priority (LOW, MEDIUM, HIGH, CRITICAL)
-        - urgent_only: Only show urgent tasks (true/false)
-        """
-        # Parse query parameters
-        status_filter = request.query_params.get('status')
-        priority_filter = request.query_params.get('priority')
-        urgent_only = request.query_params.get('urgent_only', 'false').lower() == 'true'
-        
-        # Create command
+        """Lista tareas con filtros opcionales."""
         command = GetTasksCommand(
-            status=status_filter,
-            priority=priority_filter,
-            urgent_only=urgent_only,
+            status=request.query_params.get('status'),
+            priority=request.query_params.get('priority'),
+            urgent_only=request.query_params.get('urgent_only', 'false').lower() == 'true',
         )
-        
-        # Execute use case
-        use_case = GetTasksUseCase(self.repository)
+
+        use_case = GetTasksUseCase(self.get_repository())
         result = use_case.execute(command)
-        
-        # Serialize response
-        serializer = TaskListResponseSerializer({
-            'tasks': [task.__dict__ for task in result.tasks],
-            'total': result.total,
-            'count': result.count,
-        })
-        
-        return Response(serializer.data)
-    
+
+        return Response(self._serialize_task_list(result))
+
     @extend_schema(
-        summary="Create a new task",
+        summary="Crear tarea",
         request=TaskCreateSerializer,
         responses={201: TaskSerializer}
     )
     def create(self, request):
-        """
-        Create a new task with AI analysis.
-        
-        The AI will automatically:
-        - Calculate urgency score (0-1)
-        - Assign priority level
-        - Extract keywords
-        """
-        # Validate input
+        """Crea una nueva tarea con análisis de IA automático."""
         serializer = TaskCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        # Create command
+
         command = CreateTaskCommand(
             title=serializer.validated_data['title'],
             description=serializer.validated_data.get('description', ''),
         )
-        
-        # Execute use case
-        use_case = CreateTaskUseCase(self.repository, self.ai_service)
-        result = use_case.execute(command)
-        
-        # Serialize response
-        response_serializer = TaskSerializer(result.__dict__)
-        
-        return Response(
-            response_serializer.data,
-            status=status.HTTP_201_CREATED
-        )
-    
+
+        try:
+            use_case = CreateTaskUseCase(self.get_repository(), self.get_ai_service())
+            result = use_case.execute(command)
+
+            return Response(
+                self._serialize_task(result),
+                status=status.HTTP_201_CREATED
+            )
+        except Exception as e:
+            logger.error(f"Error creando tarea: {e}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @extend_schema(
-        summary="Get task detail",
+        summary="Obtener detalle de tarea",
         responses={200: TaskSerializer, 404: None}
     )
     def retrieve(self, request, pk=None):
-        """Get a single task by ID."""
+        """Obtiene una tarea por ID."""
         try:
-            use_case = GetTaskByIdUseCase(self.repository)
-            result = use_case.execute(pk)
-            
-            serializer = TaskSerializer(result.__dict__)
-            return Response(serializer.data)
-            
+            task_id = self._validate_uuid(pk)
+            use_case = GetTaskByIdUseCase(self.get_repository())
+            result = use_case.execute(task_id)
+
+            return Response(self._serialize_task(result))
+
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except TaskNotFoundException:
-            return Response(
-                {'error': 'Task not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-    
+            return Response({'error': 'Tarea no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
     @extend_schema(
-        summary="Update a task",
+        summary="Actualizar tarea",
         request=TaskUpdateSerializer,
         responses={200: TaskSerializer, 404: None}
     )
     def partial_update(self, request, pk=None):
-        """
-        Update a task (partial update).
-        
-        Only provided fields will be updated.
-        """
-        # Validate input
+        """Actualiza una tarea (actualización parcial)."""
+        try:
+            task_id = self._validate_uuid(pk)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = TaskUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        # Create command
+
         command = UpdateTaskCommand(
-            task_id=pk,
+            task_id=task_id,
             **serializer.validated_data
         )
-        
+
         try:
-            # Execute use case
-            use_case = UpdateTaskUseCase(self.repository)
+            use_case = UpdateTaskUseCase(self.get_repository())
             result = use_case.execute(command)
-            
-            # Serialize response
-            response_serializer = TaskSerializer(result.__dict__)
-            return Response(response_serializer.data)
-            
+
+            return Response(self._serialize_task(result))
+
         except TaskNotFoundException:
-            return Response(
-                {'error': 'Task not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-    
+            return Response({'error': 'Tarea no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     @extend_schema(
-        summary="Delete a task",
+        summary="Eliminar tarea",
         responses={204: None, 404: None}
     )
     def destroy(self, request, pk=None):
-        """Delete a task."""
-        use_case = DeleteTaskUseCase(self.repository)
-        result = use_case.execute(pk)
-        
+        """Elimina una tarea."""
+        try:
+            task_id = self._validate_uuid(pk)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        use_case = DeleteTaskUseCase(self.get_repository())
+        result = use_case.execute(task_id)
+
         if result.success:
             return Response(status=status.HTTP_204_NO_CONTENT)
         else:
-            return Response(
-                {'error': 'Task not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-    
+            return Response({'error': 'Tarea no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
     @extend_schema(
-        summary="Get tasks prioritized by AI",
+        summary="Tareas priorizadas por IA",
         responses={200: TaskListResponseSerializer}
     )
     @action(detail=False, methods=['get'])
     def prioritized(self, request):
-        """
-        Get tasks sorted by AI urgency score.
-        
-        Tasks with higher urgency_score appear first.
-        This is the AI-powered smart prioritization feature.
-        """
-        # Execute use case
-        use_case = PrioritizeTasksUseCase(self.repository)
+        """Obtiene tareas ordenadas por urgencia (IA)."""
+        use_case = PrioritizeTasksUseCase(self.get_repository())
         result = use_case.execute(include_completed=False)
-        
-        # Serialize response
-        serializer = TaskListResponseSerializer({
-            'tasks': [task.__dict__ for task in result.tasks],
-            'total': result.total,
-            'count': len(result.tasks),
-        })
-        
-        return Response(serializer.data)
+
+        return Response(self._serialize_task_list(result))

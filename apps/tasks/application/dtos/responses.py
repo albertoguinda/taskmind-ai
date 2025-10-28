@@ -1,8 +1,7 @@
 """
-Response DTOs for Use Cases.
+DTOs de Respuesta (Output).
 
-Responses represent the result of an action.
-They are simple data containers for returning data to the interface layer.
+Representan los datos que se devuelven al cliente.
 """
 
 from dataclasses import dataclass
@@ -10,15 +9,12 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
+from apps.tasks.domain import Task
+
 
 @dataclass
 class TaskResponse:
-    """
-    Response DTO for a single task.
-    
-    This is what the Use Cases return to the interface layer.
-    It's a simple DTO, not a domain entity.
-    """
+    """DTO de respuesta para una tarea individual."""
     id: UUID
     title: str
     description: str
@@ -30,16 +26,8 @@ class TaskResponse:
     updated_at: datetime
     
     @classmethod
-    def from_entity(cls, task) -> "TaskResponse":
-        """
-        Create response from domain entity.
-        
-        Args:
-            task: Task domain entity
-            
-        Returns:
-            TaskResponse DTO
-        """
+    def from_entity(cls, task: Task) -> "TaskResponse":
+        """Crea TaskResponse desde entidad de dominio."""
         return cls(
             id=task.id,
             title=task.title,
@@ -55,56 +43,16 @@ class TaskResponse:
 
 @dataclass
 class TaskListResponse:
-    """
-    Response DTO for a list of tasks.
-    
-    Includes pagination metadata.
-    """
+    """DTO de respuesta para lista de tareas con metadata."""
     tasks: List[TaskResponse]
     total: int
-    limit: Optional[int]
-    offset: int
-    
-    @property
-    def count(self) -> int:
-        """Number of tasks in this response."""
-        return len(self.tasks)
-
-
-@dataclass
-class AnalysisResponse:
-    """
-    Response DTO for AI analysis.
-    
-    This is what the AI analysis returns.
-    """
-    urgency_score: float
-    keywords: List[str]
-    confidence: float
-    sentiment: float
-    
-    @classmethod
-    def from_entity(cls, analysis) -> "AnalysisResponse":
-        """
-        Create response from Analysis entity.
-        
-        Args:
-            analysis: Analysis domain entity
-            
-        Returns:
-            AnalysisResponse DTO
-        """
-        return cls(
-            urgency_score=float(analysis.urgency_score),
-            keywords=analysis.keywords,
-            confidence=analysis.confidence,
-            sentiment=analysis.sentiment,
-        )
+    limit: Optional[int] = None
+    offset: int = 0
 
 
 @dataclass
 class DeleteTaskResponse:
-    """Response for task deletion."""
+    """DTO de respuesta para operación de eliminación."""
     success: bool
     task_id: UUID
-    message: str = "Task deleted successfully"
+    message: str

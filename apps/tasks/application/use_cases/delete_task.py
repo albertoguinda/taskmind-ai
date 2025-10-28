@@ -1,53 +1,50 @@
 """
-Delete Task Use Case.
+Caso de Uso: Eliminar Tarea.
 
-Deletes a task from the system.
+Elimina una tarea del sistema.
 """
 
+import logging
 from uuid import UUID
 
 from apps.tasks.domain import TaskRepository
 from ..dtos import DeleteTaskResponse
 
+logger = logging.getLogger(__name__)
+
 
 class DeleteTaskUseCase:
     """
-    Use Case: Delete a task.
-    
-    Soft delete could be implemented here if needed.
+    Caso de uso para eliminar una tarea.
+    Actualmente es hard delete, pero podría implementarse soft delete.
     """
     
     def __init__(self, task_repository: TaskRepository):
-        """
-        Initialize use case.
-        
-        Args:
-            task_repository: Repository for task persistence
-        """
         self.task_repository = task_repository
     
     def execute(self, task_id: UUID) -> DeleteTaskResponse:
         """
-        Execute the use case.
+        Ejecuta el caso de uso.
         
         Args:
-            task_id: UUID of task to delete
-            
+            task_id: UUID de la tarea a eliminar
+        
         Returns:
-            DeleteTaskResponse with success status
+            DeleteTaskResponse con el estado de la operación
         """
-        # Delete from repository
         success = self.task_repository.delete(task_id)
         
         if success:
+            logger.info(f"Tarea eliminada: {task_id}")
             return DeleteTaskResponse(
                 success=True,
                 task_id=task_id,
-                message="Task deleted successfully"
+                message="Tarea eliminada exitosamente"
             )
         else:
+            logger.warning(f"Tarea no encontrada: {task_id}")
             return DeleteTaskResponse(
                 success=False,
                 task_id=task_id,
-                message="Task not found"
+                message="Tarea no encontrada"
             )

@@ -1,49 +1,43 @@
 """
-Get Tasks Use Case.
+Caso de Uso: Obtener Tareas.
 
-Retrieves tasks from repository with optional filters.
+Recupera tareas del repositorio con filtros opcionales.
 """
 
+import logging
 from typing import List
 
-from apps.tasks.domain import Task, TaskRepository, Priority, Status
+from apps.tasks.domain import Task, TaskRepository, Priority, Status, TaskNotFoundException
 from ..dtos import GetTasksCommand, TaskListResponse, TaskResponse
+
+logger = logging.getLogger(__name__)
 
 
 class GetTasksUseCase:
     """
-    Use Case: Get multiple tasks with filters.
+    Caso de uso para obtener múltiples tareas con filtros.
     
-    Supports filtering by:
+    Soporta filtrado por:
     - Status
     - Priority
-    - Urgent only
-    - Pagination (limit/offset)
+    - Solo urgentes
+    - Paginación (limit/offset)
     """
     
     def __init__(self, task_repository: TaskRepository):
-        """
-        Initialize use case.
-        
-        Args:
-            task_repository: Repository for task persistence
-        """
         self.task_repository = task_repository
     
     def execute(self, command: GetTasksCommand) -> TaskListResponse:
         """
-        Execute the use case.
+        Ejecuta el caso de uso.
         
         Args:
-            command: Query parameters
-            
-        Returns:
-            TaskListResponse with tasks and metadata
-        """
-        # Start with all tasks
-        tasks: List[Task] = []
+            command: Parámetros de consulta y filtros
         
-        # Apply filters
+        Returns:
+            TaskListResponse con tareas y metadata
+        """
+        # Aplicar filtros
         if command.urgent_only:
             tasks = self.task_repository.find_urgent_tasks()
         elif command.status:
@@ -55,16 +49,18 @@ class GetTasksUseCase:
         else:
             tasks = self.task_repository.find_all()
         
-        # Get total before pagination
+        # Total antes de paginar
         total = len(tasks)
         
-        # Apply pagination
+        # Aplicar paginación
         if command.limit:
             start = command.offset
             end = start + command.limit
             tasks = tasks[start:end]
         
-        # Convert to response DTOs
+        logger.info(f"Tareas obtenidas: {len(tasks)} de {total}")
+        
+        # Convertir a DTOs de respuesta
         task_responses = [TaskResponse.from_entity(t) for t in tasks]
         
         return TaskListResponse(
@@ -76,28 +72,24 @@ class GetTasksUseCase:
 
 
 class GetTaskByIdUseCase:
-    """
-    Use Case: Get a single task by ID.
-    """
+    """Caso de uso para obtener una tarea por ID."""
     
     def __init__(self, task_repository: TaskRepository):
         self.task_repository = task_repository
     
     def execute(self, task_id) -> TaskResponse:
         """
-        Get task by ID.
+        Obtiene una tarea por su ID.
         
         Args:
-            task_id: UUID of the task
-            
+            task_id: UUID de la tarea
+        
         Returns:
             TaskResponse
-            
-        Raises:
-            TaskNotFoundException: If task not found
-        """
-        from apps.tasks.domain import TaskNotFoundException
         
+        Raises:
+            TaskNotFoundException: Si la tarea no existe
+        """
         task = self.task_repository.find_by_id(task_id)
         
         if not task:

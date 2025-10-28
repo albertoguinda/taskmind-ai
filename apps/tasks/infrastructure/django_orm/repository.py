@@ -1,38 +1,23 @@
 """
-Django ORM Repository Implementation.
+Implementación del Repositorio con Django ORM.
 
-Implements TaskRepository interface using Django ORM.
-This is where domain entities are converted to/from database models.
+Adapta Django ORM a la interfaz de dominio TaskRepository.
+Convierte entre entidades de dominio (Task) y modelos ORM (TaskModel).
 """
 
 from typing import List, Optional
 from uuid import UUID
+from django.db.models import Q
 
 from apps.tasks.domain import Task, Priority, Status, UrgencyScore, TaskRepository
 from .models import TaskModel
 
 
 class DjangoTaskRepository(TaskRepository):
-    """
-    Django ORM implementation of TaskRepository.
-    
-    This class adapts Django ORM to our domain interface.
-    It converts between domain entities (Task) and ORM models (TaskModel).
-    
-    This follows the Adapter pattern and Repository pattern.
-    """
+    """Implementación del repositorio usando Django ORM."""
     
     def save(self, task: Task) -> Task:
-        """
-        Save a task (create or update).
-        
-        Args:
-            task: Domain task entity
-            
-        Returns:
-            Saved task entity
-        """
-        # Convert domain entity to ORM model
+        """Guarda una tarea (create o update)."""
         task_model, created = TaskModel.objects.update_or_create(
             id=task.id,
             defaults={
@@ -45,11 +30,10 @@ class DjangoTaskRepository(TaskRepository):
             }
         )
         
-        # Convert back to domain entity with updated timestamps
         return self._to_domain(task_model)
     
     def find_by_id(self, task_id: UUID) -> Optional[Task]:
-        """Find task by ID."""
+        """Busca tarea por ID."""
         try:
             task_model = TaskModel.objects.get(id=task_id)
             return self._to_domain(task_model)
@@ -57,31 +41,29 @@ class DjangoTaskRepository(TaskRepository):
             return None
     
     def find_all(self) -> List[Task]:
-        """Get all tasks."""
+        """Obtiene todas las tareas."""
         task_models = TaskModel.objects.all()
         return [self._to_domain(tm) for tm in task_models]
     
     def find_by_status(self, status: Status) -> List[Task]:
-        """Find tasks by status."""
+        """Busca tareas por estado."""
         task_models = TaskModel.objects.filter(status=status.value)
         return [self._to_domain(tm) for tm in task_models]
     
     def find_by_priority(self, priority: Priority) -> List[Task]:
-        """Find tasks by priority."""
+        """Busca tareas por prioridad."""
         task_models = TaskModel.objects.filter(priority=priority.value)
         return [self._to_domain(tm) for tm in task_models]
     
     def find_urgent_tasks(self) -> List[Task]:
-        """Find urgent tasks (urgency >= 0.7), sorted by urgency."""
+        """Busca tareas urgentes (urgency >= 0.7), ordenadas por urgencia."""
         task_models = TaskModel.objects.filter(
             urgency_score__gte=0.7
         ).order_by('-urgency_score')
         return [self._to_domain(tm) for tm in task_models]
     
     def find_by_keyword(self, keyword: str) -> List[Task]:
-        """Find tasks containing a keyword in title, description, or AI keywords."""
-        from django.db.models import Q
-        
+        """Busca tareas por keyword en título, descripción o keywords de IA."""
         task_models = TaskModel.objects.filter(
             Q(title__icontains=keyword) |
             Q(description__icontains=keyword) |
@@ -90,33 +72,21 @@ class DjangoTaskRepository(TaskRepository):
         return [self._to_domain(tm) for tm in task_models]
     
     def delete(self, task_id: UUID) -> bool:
-        """Delete a task."""
+        """Elimina una tarea. Retorna True si existía."""
         deleted_count, _ = TaskModel.objects.filter(id=task_id).delete()
         return deleted_count > 0
     
     def exists(self, task_id: UUID) -> bool:
-        """Check if task exists."""
+        """Verifica si una tarea existe."""
         return TaskModel.objects.filter(id=task_id).exists()
     
     def count(self) -> int:
-        """Count total tasks."""
+        """Cuenta el total de tareas."""
         return TaskModel.objects.count()
-    
-    # Private helper methods
     
     @staticmethod
     def _to_domain(task_model: TaskModel) -> Task:
-        """
-        Convert Django ORM model to domain entity.
-        
-        This is the mapping layer between infrastructure and domain.
-        
-        Args:
-            task_model: Django ORM model
-            
-        Returns:
-            Domain Task entity
-        """
+        """Convierte modelo ORM a entidad de dominio."""
         return Task(
             id=task_model.id,
             title=task_model.title,

@@ -1,94 +1,80 @@
 """
-API Serializers.
+Serializadores de API.
 
-Serializers handle JSON serialization/deserialization.
-They convert between HTTP requests/responses and DTOs.
+Manejan serialización/deserialización JSON entre HTTP y DTOs.
 """
 
 from rest_framework import serializers
-from uuid import UUID
 
 
 class TaskSerializer(serializers.Serializer):
-    """
-    Serializer for Task output.
+    """Serializer para respuestas de Task (GET)."""
     
-    This is used for GET responses.
-    """
     id = serializers.UUIDField(read_only=True)
     title = serializers.CharField()
     description = serializers.CharField()
     priority = serializers.CharField()
     status = serializers.CharField()
-    urgency_score = serializers.FloatField()
-    ai_keywords = serializers.ListField(child=serializers.CharField())
+    urgency_score = serializers.FloatField(min_value=0.0, max_value=1.0)
+    ai_keywords = serializers.ListField(
+        child=serializers.CharField(),
+        allow_empty=True
+    )
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
 
 class TaskCreateSerializer(serializers.Serializer):
-    """
-    Serializer for creating a task.
+    """Serializer para crear tareas (POST)."""
     
-    This is used for POST requests.
-    Only requires title and description.
-    """
     title = serializers.CharField(
         max_length=200,
-        help_text="Task title (max 200 characters)"
+        help_text="Título de la tarea (máx 200 caracteres)"
     )
     description = serializers.CharField(
         allow_blank=True,
         default="",
-        help_text="Detailed task description"
+        help_text="Descripción detallada"
     )
     
     def validate_title(self, value):
-        """Validate title is not empty."""
+        """Valida que el título no esté vacío."""
         if not value.strip():
-            raise serializers.ValidationError("Title cannot be empty")
-        return value
+            raise serializers.ValidationError("El título no puede estar vacío")
+        return value.strip()
 
 
 class TaskUpdateSerializer(serializers.Serializer):
-    """
-    Serializer for updating a task.
+    """Serializer para actualizar tareas (PATCH). Todos los campos opcionales."""
     
-    This is used for PATCH requests.
-    All fields are optional.
-    """
     title = serializers.CharField(
         max_length=200,
-        required=False,
-        help_text="Task title"
+        required=False
     )
     description = serializers.CharField(
         required=False,
-        allow_blank=True,
-        help_text="Task description"
+        allow_blank=True
     )
     priority = serializers.ChoiceField(
         choices=['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
-        required=False,
-        help_text="Task priority level"
+        required=False
     )
     status = serializers.ChoiceField(
         choices=['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED'],
-        required=False,
-        help_text="Task status"
+        required=False
     )
-
-
-class AnalysisSerializer(serializers.Serializer):
-    """Serializer for AI analysis results."""
-    urgency_score = serializers.FloatField()
-    keywords = serializers.ListField(child=serializers.CharField())
-    confidence = serializers.FloatField()
-    sentiment = serializers.FloatField()
+    
+    def validate_title(self, value):
+        """Valida título si se proporciona."""
+        if value is not None and not value.strip():
+            raise serializers.ValidationError("El título no puede estar vacío")
+        return value.strip() if value else value
 
 
 class TaskListResponseSerializer(serializers.Serializer):
-    """Serializer for paginated task list."""
+    """Serializer para lista paginada de tareas."""
+    
     tasks = TaskSerializer(many=True)
     total = serializers.IntegerField()
-    count = serializers.IntegerField()
+    limit = serializers.IntegerField(required=False, allow_null=True)
+    offset = serializers.IntegerField(default=0)

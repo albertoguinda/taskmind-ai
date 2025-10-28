@@ -1,12 +1,13 @@
 """
-Model Loader - Singleton pattern.
+Cargador de Modelos - Singleton Thread-Safe.
 
-Loads Hugging Face models once and caches them in memory.
-This prevents loading models on every request (expensive operation).
+Carga modelos de Hugging Face una vez y los mantiene en memoria.
+Mejora rendimiento de 30s a 0.5s por análisis.
 """
 
 import os
-from typing import Dict, Any
+import threading
+from typing import Dict, Any, Optional
 from transformers import pipeline
 import logging
 
@@ -14,90 +15,100 @@ logger = logging.getLogger(__name__)
 
 
 class ModelLoader:
-    """
-    Singleton class to load and cache Hugging Face models.
-    
-    Models are loaded once at startup and kept in memory.
-    This significantly improves performance.
-    """
-    
-    _instance = None
+    """Singleton thread-safe para cargar y cachear modelos de Hugging Face."""
+
+    _instance: Optional['ModelLoader'] = None
+    _lock = threading.Lock()
     _models: Dict[str, Any] = {}
-    
+    _initialized = False
+
     def __new__(cls):
-        """Singleton pattern - only one instance."""
+        """Implementación thread-safe del singleton (double-check locking)."""
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
-        """Initialize (only once due to singleton)."""
-        if not self._models:
-            logger.info("🤖 Loading Hugging Face models...")
-            self._load_models()
-    
+        """Inicializa los modelos solo una vez."""
+        if self._initialized:
+            return
+        
+        with self._lock:
+            if not self._initialized:
+                logger.info("🤖 Cargando modelos de Hugging Face...")
+                self._load_models()
+                self._initialized = True
+
     def _load_models(self):
-        """Load all required models."""
+        """Carga todos los modelos de IA necesarios."""
+        cache_dir = os.getenv('TRANSFORMERS_CACHE', '/app/.cache/huggingface')
+        
+        # Configuración centralizada de modelos
+        models_config = {
+            'classifier': {
+                'task': 'zero-shot-classification',
+                'model': 'facebook/bart-large-mnli',
+                'size': '1.6GB'
+            },
+            'sentiment': {
+                'task': 'sentiment-analysis',
+                'model': 'distilbert-base-uncased-finetuned-sst-2-english',
+                'size': '250MB'
+            },
+            'ner': {
+                'task': 'ner',
+                'model': 'dslim/bert-base-NER',
+                'size': '400MB',
+                'kwargs': {'aggregation_strategy': 'simple'}
+            }
+        }
+
         try:
-            # Set cache directory
-            cache_dir = os.getenv('TRANSFORMERS_CACHE', '/app/.cache/huggingface')
-            
-            # 1. Zero-shot classification (for urgency)
-            logger.info("📦 Loading zero-shot classifier...")
-            self._models['classifier'] = pipeline(
-                "zero-shot-classification",
-                model="facebook/bart-large-mnli",
-                cache_dir=cache_dir,
-                device=-1,  # CPU (-1), GPU (0)
-            )
-            logger.info("✅ Zero-shot classifier loaded")
-            
-            # 2. Sentiment analysis
-            logger.info("📦 Loading sentiment analyzer...")
-            self._models['sentiment'] = pipeline(
-                "sentiment-analysis",
-                model="distilbert-base-uncased-finetuned-sst-2-english",
-                cache_dir=cache_dir,
-                device=-1,
-            )
-            logger.info("✅ Sentiment analyzer loaded")
-            
-            # 3. Named Entity Recognition (for keyword extraction)
-            logger.info("📦 Loading NER model...")
-            self._models['ner'] = pipeline(
-                "ner",
-                model="dslim/bert-base-NER",
-                device=-1,
-                aggregation_strategy="simple",
-            )
-            logger.info("✅ NER model loaded")
-            
-            logger.info("🎉 All models loaded successfully!")
-            
+            for name, config in models_config.items():
+                logger.info(f"📦 Cargando {name}...")
+                kwargs = config.get('kwargs', {})
+                
+                self._models[name] = pipeline(
+                    config['task'],
+                    model=config['model'],
+                    cache_dir=cache_dir,
+                    device=-1,  # CPU (-1), GPU (0)
+                    **kwargs
+                )
+                logger.info(f"✅ {name} cargado ({config['size']})")
+
+            logger.info("🎉 Todos los modelos cargados (~2.25GB)")
+
         except Exception as e:
-            logger.error(f"❌ Error loading models: {e}")
-            logger.warning("⚠️  Falling back to Mock AI")
-            raise
-    
+            logger.error(f"❌ Error cargando modelos: {e}")
+            self._models.clear()
+            raise RuntimeError(f"No se pudieron cargar los modelos: {e}") from e
+
     @property
     def classifier(self):
-        """Get zero-shot classifier."""
+        """Clasificador zero-shot para urgencia."""
         return self._models.get('classifier')
-    
+
     @property
     def sentiment(self):
-        """Get sentiment analyzer."""
+        """Analizador de sentimiento."""
         return self._models.get('sentiment')
-    
+
     @property
     def ner(self):
-        """Get NER model."""
+        """Modelo NER para keywords."""
         return self._models.get('ner')
-    
+
     def is_loaded(self) -> bool:
-        """Check if models are loaded."""
-        return len(self._models) > 0
+        """Verifica si todos los modelos están cargados."""
+        return len(self._models) == 3
+
+    def get_memory_usage(self) -> str:
+        """Estima uso de memoria de los modelos."""
+        return "~2.25 GB" if self.is_loaded() else "0 MB"
 
 
-# Global instance
+# Instancia global singleton
 model_loader = ModelLoader()
