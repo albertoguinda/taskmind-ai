@@ -39,7 +39,7 @@ TaskMind AI → urgency: 0.98 | sentiment: -0.85 | priority: CRITICAL
 
 ```bash
 # 1. Clonar repositorio
-git clone https://github.com/tuusuario/taskmind-ai.git
+git clone https://github.com/albertoguinda/taskmind-ai.git
 cd taskmind-ai
 
 # 2. Configurar variables de entorno
@@ -286,7 +286,7 @@ MIT License - Ver [LICENSE](LICENSE) para detalles.
 
 - LinkedIn: [alberto-guinda](https://linkedin.com/in/alberto-guinda)
 - GitHub: [@albertoguinda](https://github.com/albertoguinda)
-- Email: [@albertoguinda](albertoguindasevilla@gmail.com)
+- Email: [albertoguindasevilla@gmail.com](mailto:albertoguindasevilla@gmail.com)
 
 ---
 
