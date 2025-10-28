@@ -1,34 +1,34 @@
 # ⚡ Quick Start - TaskMind AI
 
-## 🚀 Setup en 5 Minutos
+## 🚀 Instalación
 
-### 1️⃣ Clonar y Configurar
+### 1️⃣ Clonar Repositorio
 
 ```bash
-git clone https://github.com/albertoguinda/taskmind-ai
+git clone https://github.com/albertoguinda/taskmind-ai.git
 cd taskmind-ai
 cp .env.example .env
 ```
 
 ---
 
-### 2️⃣ Levantar Docker
+### 2️⃣ Levantar Servicios
 
 ```bash
 docker compose up -d
 
-# Verificar que todo esté UP (esperar ~30s)
+# Verificar estado (esperar ~30s)
 docker compose ps
 ```
 
-**Debe mostrar 6 servicios:**
+**Servicios esperados:**
 
-- ✅ taskmind_db
-- ✅ taskmind_redis
-- ✅ taskmind_rabbitmq
-- ✅ taskmind_web
-- ✅ taskmind_celery_worker
-- ✅ taskmind_celery_beat
+- taskmind_db (PostgreSQL)
+- taskmind_redis (Cache)
+- taskmind_rabbitmq (Message broker)
+- taskmind_web (API Django)
+- taskmind_celery_worker (Async tasks)
+- taskmind_celery_beat (Scheduler)
 
 ---
 
@@ -40,116 +40,186 @@ docker compose exec web python manage.py migrate
 
 ---
 
-### 4️⃣ Probar API
+## 🧪 Verificar Instalación
 
-**Abrir en navegador:**
+### Probar API
 
-- 📄 **Swagger:** http://localhost:8000/api/docs/
-- 🔗 **API:** http://localhost:8000/api/tasks/
+**Navegador:**
 
-**O con curl:**
+- Swagger UI: http://localhost:8000/api/docs/
+- API Endpoint: http://localhost:8000/api/tasks/
+
+**CLI:**
 
 ```bash
-# Crear tarea
+# Health check
+curl http://localhost:8000/api/tasks/
+
+# Crear tarea de prueba
 curl -X POST http://localhost:8000/api/tasks/ \
   -H "Content-Type: application/json" \
-  -d '{"title": "URGENT: Fix bug", "description": "Server down"}'
+  -d '{
+    "title": "URGENT: Fix production bug",
+    "description": "Server returning 500 errors"
+  }'
 
-# Listar tareas
-curl http://localhost:8000/api/tasks/
+# Ver resultado (priorización automática)
+curl http://localhost:8000/api/tasks/prioritized/
 ```
+
+---
+
+### Verificar Modelos IA
+
+```bash
+# Entrar al shell Django
+docker compose exec web python manage.py shell
+
+# Verificar carga de modelos
+>>> from apps.tasks.infrastructure.ai import model_loader
+>>> model_loader.is_loaded()
+True
+>>> model_loader.get_memory_usage()
+'~2.25 GB'
+>>> exit()
+```
+
+**Primera carga:** Los modelos se descargan automáticamente (~2.25GB, 5-10 min).
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Ejecutar todos los tests
+# Ejecutar test suite
 docker compose exec web pytest -v -c pytest.ini
 
-# Ver logs de la app
+# Con coverage
+docker compose exec web pytest --cov=apps --cov-report=term-missing
+
+# Ver logs de aplicación
 docker compose logs -f web
 ```
 
 ---
 
-## 🤖 Verificar IA
+## 🔧 Desarrollo
+
+### Comandos Útiles
 
 ```bash
+# Shell interactivo
 docker compose exec web python manage.py shell
 
-# En el shell:
->>> from apps.tasks.infrastructure.ai import model_loader
->>> model_loader.is_loaded()
-True
->>> model_loader.get_memory_usage()
-'~2.25 GB'
+# Crear migraciones
+docker compose exec web python manage.py makemigrations
+
+# Formatear código
+docker compose exec web black apps/
+
+# Type checking
+docker compose exec web mypy apps/
+
+# Linting
+docker compose exec web flake8 apps/
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Error: Servicios no levantan
+### Servicios no levantan
 
 ```bash
 docker compose down
 docker compose up -d --build
 ```
 
-### Error: Modelos IA no cargan
+### Modelos IA tardan en cargar
 
 ```bash
-# Ver logs
+# Ver progreso
 docker compose logs web | grep "🤖"
 
-# Esperar mensaje: "🎉 Todos los modelos cargados"
+# Mensaje esperado: "🎉 Todos los modelos cargados"
 ```
 
-### Limpiar todo (⚠️ borra DB)
+### Reinicio completo (⚠️ elimina datos)
 
 ```bash
 docker compose down -v
+docker compose up -d
+docker compose exec web python manage.py migrate
+```
+
+### Error de NumPy
+
+Si aparece error de compatibilidad NumPy 1.x/2.x:
+
+```bash
+# Ya está configurado numpy<2.0.0 en requirements.txt
+docker compose build --no-cache web
 docker compose up -d
 ```
 
 ---
 
-## 📤 Subir a GitHub
+## 📊 Requisitos del Sistema
+
+**Recomendado:**
+
+- CPU: 4+ cores
+- RAM: 16GB+
+- Disco: 10GB libres
+- Primera carga de modelos: 5-10 min
+
+**Mínimo para desarrollo:**
+
+- CPU: 2 cores
+- RAM: 8GB
+- Configurar `AI_ENGINE=mock` en `.env` para desarrollo sin IA
+
+---
+
+## 🎯 Ejemplo de Uso
+
+### Flujo completo
+
+1. **Crear tarea urgente:**
 
 ```bash
-git add .
-git commit -m "feat: implementar TaskMind AI con Clean Architecture"
-git push origin main
+curl -X POST http://localhost:8000/api/tasks/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "CRITICAL: Database connection lost",
+    "description": "Production users cannot access data"
+  }'
 ```
 
-**Hacer repo público:** Settings → Change visibility → Make public
+2. **Respuesta con análisis IA:**
+
+```json
+{
+  "id": "uuid-here",
+  "title": "CRITICAL: Database connection lost",
+  "priority": "CRITICAL",
+  "urgency_score": 0.97,
+  "ai_keywords": ["critical", "database", "production", "users"],
+  "status": "PENDING",
+  "created_at": "2025-10-28T15:00:00Z"
+}
+```
+
+3. **Listar tareas priorizadas:**
+
+```bash
+curl http://localhost:8000/api/tasks/prioritized/
+```
 
 ---
 
-## ✅ Checklist para Recruiter
+## 📚 Recursos
 
-Antes de compartir:
-
-- [ ] Docker corriendo: `docker compose ps`
-- [ ] API funciona: http://localhost:8000/api/docs/
-- [ ] Tests pasan: `docker compose exec web pytest -v`
-- [ ] Código en GitHub (público)
-- [ ] README.md claro y conciso
-
----
-
-## 🎯 Demo Rápida (2 minutos)
-
-1. `docker compose up -d`
-2. Abrir http://localhost:8000/api/docs/
-3. **POST /api/tasks/** con tarea urgente
-4. Mostrar priorización automática
-5. Explicar arquitectura en README.md
-
-**Puntos clave:**
-
-- ✅ Clean Architecture + SOLID
-- ✅ IA real (3 modelos Hugging Face)
-- ✅ Production-ready (Docker + PostgreSQL)
-- ✅ Código limpio
+- **[README.md](../README.md)** - Descripción general del proyecto
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Decisiones arquitectónicas
+- **[Swagger UI](http://localhost:8000/api/docs/)** - API interactiva
