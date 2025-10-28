@@ -262,7 +262,6 @@ TaskMindAI/
 ├── docs/                              # Documentación adicional
 │   ├── ARCHITECTURE.md
 │   └── QUICKSTART.md
-├── shared/                            # Código compartido
 ├── docker-compose.yml
 ├── requirements.txt
 ├── pyproject.toml
