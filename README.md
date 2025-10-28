@@ -233,16 +233,43 @@ docker compose exec web python manage.py shell
 TaskMindAI/
 ├── apps/
 │   └── tasks/
-│       ├── domain/              # Entidades, Value Objects, Servicios
-│       ├── application/         # Casos de Uso, DTOs
-│       ├── infrastructure/      # Django ORM, AI Engine
-│       └── interfaces/          # API ViewSets, Serializers
-├── config/                      # Settings Django
-├── tests/                       # Tests unitarios, integración, e2e
-├── docker/                      # Dockerfiles
-├── docs/                        # Documentación adicional
+│       ├── domain/                    # Entidades, Value Objects, Servicios
+│       │   ├── entities/
+│       │   ├── value_objects/
+│       │   ├── repositories/
+│       │   └── services/
+│       ├── application/               # Casos de Uso, DTOs
+│       │   ├── use_cases/
+│       │   └── dtos/
+│       ├── infrastructure/            # Django ORM, AI Engine, Cache
+│       │   ├── django_orm/
+│       │   ├── ai/
+│       │   └── cache/
+│       ├── interfaces/                # API ViewSets, Serializers
+│       │   └── api/
+│       ├── management/
+│       │   └── commands/
+│       └── migrations/
+├── config/                            # Settings Django
+│   └── settings/
+├── tests/                             # Tests unitarios, integración, e2e
+│   ├── unit/
+│   │   ├── domain/
+│   │   └── application/
+│   ├── integration/
+│   └── e2e/
+├── docker/                            # Dockerfiles
+├── docs/                              # Documentación adicional
+│   ├── ARCHITECTURE.md
+│   └── QUICKSTART.md
+├── shared/                            # Código compartido
 ├── docker-compose.yml
 ├── requirements.txt
+├── pyproject.toml
+├── pytest.ini
+├── .env.example
+├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
