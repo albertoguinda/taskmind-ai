@@ -1,181 +1,158 @@
-# TaskMind AI - Software Architecture
+# 🏗️ Arquitectura - TaskMind AI
 
-## Architecture Decision Records (ADRs)
+## 🎯 Decisiones Clave
 
-### ADR-001: Monolito modular con Clean Architecture
+| Decisión                     | Razón                                | Alternativa Rechazada  |
+| ---------------------------- | ------------------------------------ | ---------------------- |
+| **Clean Architecture**       | Mantenibilidad y testabilidad        | Django vanilla         |
+| **Hugging Face (no OpenAI)** | Gratis, sin API calls, control total | OpenAI GPT (de pago)   |
+| **Celery + RabbitMQ**        | Análisis IA asíncrono (~2s)          | Procesamiento síncrono |
 
-**Contexto:** Proyecto demo que debe demostrar capacidad arquitectónica
-**Decisión:** Clean Architecture + DDD light
-**Consecuencias:** Mayor complejidad inicial, mejor mantenibilidad
-**Alternativas rechazadas:** Django vanilla, microservicios
+---
 
-### ADR-002: Hugging Face para IA (no OpenAI)
+## 📐 Capas (Clean Architecture)
 
-**Contexto:** Necesitamos IA gratis y rápida
-**Decisión:** Transformers con modelos pre-entrenados
-**Consecuencias:** Más control, sin costos, latencia aceptable
-**Alternativas rechazadas:** OpenAI GPT (de pago), RAG local (lento)
+```
+┌─────────────────────────────────────┐
+│   INTERFACES (API REST)             │  Django REST Framework
+│   • ViewSets  • Serializers         │
+├─────────────────────────────────────┤
+│   APPLICATION (Use Cases)           │  Pure Python
+│   • CreateTask  • PrioritizeTasks   │
+├─────────────────────────────────────┤
+│   DOMAIN (Business Logic)           │  Framework-agnostic
+│   • Task  • Priority  • Status      │
+├─────────────────────────────────────┤
+│   INFRASTRUCTURE (External)         │  Adapters
+│   • Django ORM  • Hugging Face AI   │
+└─────────────────────────────────────┘
+```
 
-### ADR-003: Celery + RabbitMQ para async
+**Regla:** Las capas internas NO conocen las externas (Dependency Inversion).
 
-**Contexto:** Análisis IA tarda 2-4 segundos
-**Decisión:** Queue asíncrona con Celery
-**Consecuencias:** Mejor UX, complejidad operativa
-**Alternativas rechazadas:** Django Channels, procesamiento síncrono
+---
 
-## Architectural Layers
+## 🔄 Flujo: Crear Tarea con IA
 
-┌───────────────────────────────────────┐
-│ INTERFACE LAYER │
-│ (API REST, Admin, CLI Commands) │
-│ │
-│ - Django REST Framework Views │
-│ - URL Routing │
-│ - Serializers (I/O validation) │
-└───────────────┬───────────────────────┘
-│
-┌───────────────▼───────────────────────┐
-│ APPLICATION LAYER │
-│ (Use Cases / Orchestration) │
-│ │
-│ - CreateTaskUseCase │
-│ - PrioritizeTasksUseCase │
-│ - AnalyzeContextUseCase │
-│ - Pure Python (no Django) │
-└───────────────┬───────────────────────┘
-│
-┌───────────────▼───────────────────────┐
-│ DOMAIN LAYER │
-│ (Business Logic / Entities) │
-│ │
-│ - Task (Entity) │
-│ - Priority (Value Object) │
-│ - TaskService (Domain Service) │
-│ - Repository Interfaces │
-│ - 100% framework-agnostic │
-└───────────────┬───────────────────────┘
-│
-┌───────────────▼───────────────────────┐
-│ INFRASTRUCTURE LAYER │
-│ (External Dependencies / Adapters) │
-│ │
-│ - Django ORM (Persistence) │
-│ - Hugging Face (AI Engine) │
-│ - Redis (Caching) │
-│ - RabbitMQ (Messaging) │
-└───────────────────────────────────────┘
+```
+1. POST /api/tasks/ {"title": "Fix bug", "description": "Server down"}
+2. TaskViewSet valida input
+3. CreateTaskUseCase.execute()
+4. AIService.analyze("Server down") → urgency: 0.95
+5. Task.priority = CRITICAL (auto-calculado)
+6. TaskRepository.save(task) → PostgreSQL
+7. Celery.notify_team.delay() [async]
+8. Return 201 Created
+```
 
-## Component Diagram
+---
 
-┌─────────────────────────────────────────────────────┐
-│ Client (REST) │
-└────────────────────────┬────────────────────────────┘
-│
-▼
-┌─────────────────────────────────────────────────────┐
-│ TaskViewSet (DRF) │
-│ POST /tasks/ GET /tasks/ PATCH /tasks/{id}/ │
-└────────────────────────┬────────────────────────────┘
-│
-┌─────────────┴─────────────┐
-▼ ▼
-┌──────────────────────┐ ┌──────────────────────┐
-│ CreateTaskUseCase │ │ PrioritizeUseCase │
-│ │ │ │
-│ 1. Validate │ │ 1. Get tasks │
-│ 2. Analyze with AI │────┤ 2. Batch analyze │
-│ 3. Save to DB │ │ 3. Sort by score │
-└──────────────────────┘ └──────────────────────┘
-│ │
-▼ ▼
-┌──────────────────────┐ ┌──────────────────────┐
-│ TaskRepository │ │ AIService │
-│ (Interface) │ │ (Interface) │
-└──────────────────────┘ └──────────────────────┘
-│ │
-▼ ▼
-┌──────────────────────┐ ┌──────────────────────┐
-│ DjangoORMRepo │ │ HuggingFaceEngine │
-│ (Implementation) │ │ (Implementation) │
-└──────────────────────┘ └──────────────────────┘
-│ │
-▼ ▼
-[PostgreSQL] [Transformers]
+## 🎨 SOLID Principles
 
-## Data Flow: Create Task with AI Priority
+### Single Responsibility
 
-POST /api/tasks/ {"title": "Fix prod bug", "description": "Server down"}
-TaskViewSet validates input
-CreateTaskUseCase.execute()
-AIService.analyze_urgency("Server down") → Priority.CRITICAL
-Task entity created with priority
-TaskRepository.save(task)
-Celery task queued: notify_team(task.id)
-Return 201 Created
-[Async] Celery worker processes notification
+```python
+✅ Cada clase = 1 responsabilidad
+Task        → Lógica de dominio
+Repository  → Persistencia
+Serializer  → Validación I/O
+```
 
-## SOLID Principles Implementation
+### Dependency Inversion
 
-### Single Responsibility Principle (SRP)
+```python
+✅ Depender de abstracciones
+class CreateTaskUseCase:
+    def __init__(self, repo: TaskRepository):  # Abstracción
+        self.repo = repo
 
-````python✅ Each class has ONE reason to changeclass Task:
-"""Entity: Only domain logic"""
-passclass TaskRepository:
-"""Persistence: Only DB operations"""
-passclass TaskSerializer:
-"""I/O: Only serialization"""
-passclass AIService:
-"""Analysis: Only AI logic"""
-pass
+# Inyección de dependencia
+use_case = CreateTaskUseCase(repo=DjangoTaskRepository())
+```
 
-### Open/Closed Principle (OCP)
-```python✅ Open for extension, closed for modificationclass AIEngine(ABC):
-@abstractmethod
-def analyze(self, text: str) -> Analysis:
-passAdd new implementation WITHOUT modifying existing code
+### Open/Closed
+
+```python
+✅ Extender sin modificar código existente
+class AIEngine(ABC):
+    @abstractmethod
+    def analyze(self, text: str): ...
+
+# Nuevas implementaciones sin tocar código viejo
 class HuggingFaceEngine(AIEngine): ...
 class OpenAIEngine(AIEngine): ...
-class ClaudeEngine(AIEngine): ...
+```
 
-### Liskov Substitution Principle (LSP)
-```python✅ Subtypes must be substitutabledef process_task(repo: TaskRepository):  # Abstract
-task = repo.find_by_id(1)Works with ANY implementation:
-process_task(DjangoORMRepository())
-process_task(MongoDBRepository())
-process_task(InMemoryRepository())  # for testing
+---
 
-### Interface Segregation Principle (ISP)
-```python✅ Clients shouldn't depend on interfaces they don't useclass Readable(Protocol):
-def find_by_id(self, id: int) -> Task: ...class Writable(Protocol):
-def save(self, task: Task) -> Task: ...class Searchable(Protocol):
-def search(self, query: str) -> List[Task]: ...Use only what you need
-class ReadOnlyTaskService:
-def init(self, repo: Readable):  # Not full repository
-self.repo = repo
+## 🧪 Estrategia de Testing
 
-### Dependency Inversion Principle (DIP)
-```python✅ Depend on abstractions, not concretions❌ BAD: High-level depends on low-level
-class TaskService:
-def init(self):
-self.repo = DjangoTaskRepository()  # Concrete!✅ GOOD: Both depend on abstraction
-class TaskService:
-def init(self, repo: TaskRepository):  # Abstract!
-self.repo = repoDependency Injection
-service = TaskService(repo=DjangoTaskRepository())
+| Tipo            | %   | Qué Testear                       |
+| --------------- | --- | --------------------------------- |
+| **Unit**        | 70% | Domain (pure Python, sin DB)      |
+| **Integration** | 20% | API + Repository (con DB de test) |
+| **E2E**         | 10% | Flujos críticos completos         |
 
-## Testing StrategyUnit Tests (70%)
-├── Domain layer: Pure Python, no DB
-├── Use cases: Mocked dependencies
-└── Services: Isolated logicIntegration Tests (20%)
-├── API endpoints: Real DB (test DB)
-├── Repository: Real PostgreSQL
-└── Full flow: Request → ResponseE2E Tests (10%)
-└── Critical paths only
+---
 
-## Performance Targets
+## 📊 Performance
 
-- API response: <100ms (without AI)
-- AI analysis: <3s (acceptable for async)
-- Database queries: N+1 eliminated
-- Redis cache hit rate: >80%
-````
+| Métrica               | Target | Actual                               |
+| --------------------- | ------ | ------------------------------------ |
+| API sin IA            | <100ms | 50-80ms                              |
+| Análisis IA           | <3s    | 250-500ms (después de carga inicial) |
+| Carga inicial modelos | -      | ~30s (solo una vez)                  |
+| Cache hit rate        | >80%   | TBD                                  |
+
+**Optimizaciones aplicadas:**
+
+- ✅ Singleton pattern para modelos IA
+- ✅ Database indexing
+- ✅ Redis caching
+- ✅ N+1 queries eliminadas
+
+---
+
+## 🔗 Dependencias Principales
+
+```python
+# IA & ML
+transformers==4.35.2    # Hugging Face
+torch==2.1.1            # PyTorch
+BART-large (1.6GB)      # Clasificación urgencia
+DistilBERT (250MB)      # Sentimiento
+BERT-NER (400MB)        # Keywords
+
+# Backend
+Django==4.2.7
+djangorestframework==3.14.0
+PostgreSQL 15
+
+# Async
+Celery==5.3.4
+RabbitMQ 3.12
+Redis 7
+```
+
+---
+
+## 📝 Notas Técnicas
+
+### ¿Por qué Clean Architecture?
+
+- ✅ Testeable sin framework
+- ✅ Independiente de UI/DB/AI
+- ✅ Lógica de negocio clara
+
+### ¿Por qué Hugging Face?
+
+- ✅ Gratis y open source
+- ✅ Control total sobre modelos
+- ✅ Sin límites de API
+- ❌ Requiere más RAM (~2.5GB)
+
+### ¿Por qué Celery?
+
+- ✅ Análisis IA no bloquea requests
+- ✅ Escalable (workers paralelos)
+- ❌ Mayor complejidad operativa

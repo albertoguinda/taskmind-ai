@@ -290,10 +290,13 @@ MIT License - Ver [LICENSE](LICENSE) para detalles.
 
 ---
 
-## 📚 Documentación Adicional
+## 📚 Documentación
 
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - Decisiones arquitectónicas detalladas
-- **[API Docs](http://localhost:8000/api/docs/)** - Swagger interactivo
+| Documento                                          | Descripción                                           |
+| -------------------------------------------------- | ----------------------------------------------------- |
+| 📘 **[QUICKSTART.md](docs/QUICKSTART.md)**         | Guía rápida de instalación y uso                      |
+| 🏗️ **[ARCHITECTURE.md](docs/ARCHITECTURE.md)**     | Decisiones arquitectónicas y SOLID                    |
+| 📡 **[API Docs](http://localhost:8000/api/docs/)** | Swagger interactivo (cuando el server esté corriendo) |
 
 ---
 

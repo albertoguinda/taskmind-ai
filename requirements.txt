@@ -1,4 +1,7 @@
-# Django Core
+# Core dependencies (NumPy < 2 for compatibility)
+numpy<2.0.0
+
+# Django
 Django==4.2.7
 djangorestframework==3.14.0
 django-filter==23.3
